@@ -41,7 +41,7 @@ jobs:
         env:
           FACEBOOK_PAGE_SLUG: kulturhusjaderberg
           FACEBOOK_SCRAPER_DEBUG: "1"
-        run: npm run scrape > facebook-events.json
+        run: node server.mjs --scrape-once > facebook-events.json
 
       - name: Ergebnis auswaehlen und an ProcessWire melden
         env:

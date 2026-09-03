@@ -190,10 +190,16 @@ async function loadEventPage(page, target, diagnostics = null) {
         .trim();
       let contextText = '';
       let node = link;
-      for (let depth = 0; depth < 6 && node?.parentElement; depth += 1) {
+      for (let depth = 0; depth < 8 && node?.parentElement; depth += 1) {
         node = node.parentElement;
         const candidate = (node.innerText || '').replace(/\s+/g, ' ').trim();
-        if (candidate.length > contextText.length && candidate.length <= 700) contextText = candidate;
+        const linkedEventIds = new Set(
+          Array.from(node.querySelectorAll('a'))
+            .map((candidateLink) => (candidateLink.getAttribute('href') || '').match(/\/events\/(\d{8,})/i)?.[1])
+            .filter(Boolean),
+        );
+        if (linkedEventIds.size > 1) break;
+        if (candidate.length > contextText.length && candidate.length <= 500) contextText = candidate;
       }
 
       addEvent(id, linkTitle, contextText);

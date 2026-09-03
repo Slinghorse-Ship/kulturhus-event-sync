@@ -30,7 +30,6 @@ function normalizePayload(input, source) {
       id,
       title: usefulTitle(item?.title),
       date: /^\d{4}-\d{2}-\d{2}$/.test(String(item?.date || '')) ? String(item.date) : '',
-      date_text: text(item?.date_text),
       url: `https://www.facebook.com/events/${id}/`,
       status: 'upcoming',
     });
@@ -46,7 +45,6 @@ function normalizePayload(input, source) {
         id,
         title: '',
         date: '',
-        date_text: '',
         url: `https://www.facebook.com/events/${id}/`,
         status: 'upcoming',
       };
@@ -60,7 +58,6 @@ function normalizePayload(input, source) {
     .sort((left, right) => left.id.localeCompare(right.id));
 
   return {
-    ...input,
     page: text(input?.page || process.env.FACEBOOK_PAGE_SLUG || 'kulturhusjaderberg'),
     scope: 'upcoming',
     source,
