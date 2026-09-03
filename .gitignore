@@ -1,0 +1,4 @@
+node_modules/
+facebook-events.json
+playwright-report/
+test-results/

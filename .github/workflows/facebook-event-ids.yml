@@ -1,0 +1,49 @@
+name: Facebook-Veranstaltungs-IDs
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - eventbrite_changed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kulturhus-facebook-event-ids
+  cancel-in-progress: false
+
+jobs:
+  scrape-upcoming-events:
+    name: Kommende Facebook-Veranstaltungen lesen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v4
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Abhaengigkeiten installieren
+        run: npm install
+
+      - name: Chromium installieren
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Kommende Veranstaltungs-IDs lesen
+        env:
+          FACEBOOK_PAGE_SLUG: kulturhusjaderberg
+          FACEBOOK_SCRAPER_DEBUG: "1"
+        run: npm run scrape > facebook-events.json
+
+      - name: Ergebnis bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: facebook-event-ids
+          path: facebook-events.json
+          if-no-files-found: error
+          retention-days: 7

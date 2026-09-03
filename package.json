@@ -1,0 +1,13 @@
+{
+  "name": "kulturhus-facebook-events",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape": "node server.mjs --scrape-once"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "140.0.0",
+    "playwright-core": "1.55.0"
+  }
+}
