@@ -85,10 +85,14 @@ async function fallbackResult() {
   }
   endpoint.searchParams.set('slug', text(process.env.FACEBOOK_PAGE_SLUG || 'kulturhusjaderberg'));
   endpoint.searchParams.set('scope', 'upcoming');
-  endpoint.searchParams.set('debug', '1');
+  const browserToken = text(process.env.EVENT_BROWSER_TOKEN);
+  if (browserToken.length < 32) throw new Error('EVENT_BROWSER_TOKEN fehlt oder ist zu kurz.');
 
   const response = await fetch(endpoint, {
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'X-Kulturhus-Event-Token': browserToken,
+    },
     signal: AbortSignal.timeout(70000),
   });
   const body = await response.text();
