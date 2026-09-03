@@ -21,12 +21,13 @@ jobs:
 
     steps:
       - name: Projekt laden
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Node.js einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Abhaengigkeiten installieren
         run: npm install
@@ -34,14 +35,26 @@ jobs:
       - name: Chromium installieren
         run: npx playwright-core install --with-deps chromium
 
-      - name: Kommende Veranstaltungs-IDs lesen
+      - name: Kommende Veranstaltungs-IDs primaer lesen
+        id: primary_scrape
+        continue-on-error: true
         env:
           FACEBOOK_PAGE_SLUG: kulturhusjaderberg
           FACEBOOK_SCRAPER_DEBUG: "1"
         run: npm run scrape > facebook-events.json
 
+      - name: Ergebnis auswaehlen und an ProcessWire melden
+        env:
+          PRIMARY_OUTCOME: ${{ steps.primary_scrape.outcome }}
+          FACEBOOK_PAGE_SLUG: ${{ github.event.client_payload.page_slug || 'kulturhusjaderberg' }}
+          FALLBACK_BROWSER_URL: ${{ github.event.client_payload.fallback_url || 'https://events.kulturhus.de' }}
+          PROCESSWIRE_CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
+          PROCESSWIRE_CALLBACK_TOKEN: ${{ github.event.client_payload.callback_token }}
+        run: node deliver.mjs
+
       - name: Ergebnis bereitstellen
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: facebook-event-ids
           path: facebook-events.json

@@ -142,14 +142,24 @@ async function loadEventPage(page, target, diagnostics = null) {
       const cleanTitle = title.replace(/\s+/g, ' ').trim();
       const cleanContext = contextText.replace(/\s+/g, ' ').trim();
       const dateMatch = cleanContext.match(/(?:Mo|Di|Mi|Do|Fr|Sa|So),?\s*\d{1,2}\.\s*(?:Jan\.?|Feb\.?|M(?:ä|ae)rz|Apr\.?|Mai|Juni?|Juli?|Aug\.?|Sept?\.?|Okt\.?|Nov\.?|Dez\.?)[^|]{0,40}/i);
+      const hasOwnTitle = cleanTitle.length >= 3
+        && cleanTitle.length <= 180
+        && !/^(?:event|veranstaltung|mehr|details|facebook)$/i.test(cleanTitle);
+      const titleScore = hasOwnTitle ? 2 : (cleanContext ? 1 : 0);
       const event = {
         id,
-        title: cleanTitle || cleanContext.slice(0, 300),
+        title: hasOwnTitle ? cleanTitle : cleanContext.slice(0, 300),
         date_text: dateMatch ? dateMatch[0].trim() : '',
         url: `https://www.facebook.com/events/${id}/`,
+        _titleScore: titleScore,
       };
       const previous = found.get(id);
-      if (!previous || event.title.length > previous.title.length) found.set(id, event);
+      if (!previous || event._titleScore > previous._titleScore) {
+        if (!event.date_text && previous?.date_text) event.date_text = previous.date_text;
+        found.set(id, event);
+      } else if (!previous.date_text && event.date_text) {
+        previous.date_text = event.date_text;
+      }
     }
 
     for (const link of document.querySelectorAll('a')) {
@@ -200,7 +210,9 @@ async function loadEventPage(page, target, diagnostics = null) {
       addEvent(match[1]);
     }
 
-    return [...found.values()].sort((left, right) => left.id.localeCompare(right.id));
+    return [...found.values()]
+      .map(({ _titleScore, ...event }) => event)
+      .sort((left, right) => left.id.localeCompare(right.id));
   });
 }
 
