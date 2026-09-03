@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
 import serverlessChromium from '@sparticuz/chromium';
 import { chromium } from 'playwright-core';
@@ -6,6 +8,28 @@ import { chromium } from 'playwright-core';
 const port = Number.parseInt(process.env.PORT || '3000', 10);
 const configuredSlug = (process.env.FACEBOOK_PAGE_SLUG || 'kulturhusjaderberg').trim();
 const isOneShot = process.argv.includes('--scrape-once');
+function configuredBrowserToken() {
+  const environmentToken = (process.env.EVENT_BROWSER_TOKEN || '').trim();
+  if (environmentToken) return environmentToken;
+  try {
+    return readFileSync(new URL('.event-browser-token', import.meta.url), 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+const browserToken = configuredBrowserToken();
+
+function boundedInteger(value, fallback, minimum, maximum) {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+const cacheTtlMs = boundedInteger(process.env.EVENT_BROWSER_CACHE_TTL_MS, 300000, 30000, 3600000);
+const browserTimeoutMs = boundedInteger(process.env.EVENT_BROWSER_TIMEOUT_MS, 60000, 15000, 70000);
+let cachedPayload = null;
+let cacheExpiresAt = 0;
+let activeScrape = null;
 
 function json(response, status, payload) {
   response.writeHead(status, {
@@ -13,6 +37,12 @@ function json(response, status, payload) {
     'Cache-Control': 'no-store',
   });
   response.end(JSON.stringify(payload));
+}
+
+function hasValidBrowserToken(request) {
+  const provided = String(request.headers['x-kulturhus-event-token'] || '').trim();
+  if (browserToken.length < 32 || provided.length !== browserToken.length) return false;
+  return timingSafeEqual(Buffer.from(provided, 'utf8'), Buffer.from(browserToken, 'utf8'));
 }
 
 async function browserInstance() {
@@ -224,6 +254,9 @@ async function loadEventPage(page, target, diagnostics = null) {
 
 async function scrapeEvents(slug, diagnostics = null) {
   const browser = await browserInstance();
+  const timeout = setTimeout(() => {
+    void browser.close().catch(() => {});
+  }, browserTimeoutMs);
   const desktop = process.env.GITHUB_ACTIONS === 'true';
   const context = await browser.newContext({
     locale: 'de-DE',
@@ -264,8 +297,9 @@ async function scrapeEvents(slug, diagnostics = null) {
     const events = await loadEventPage(page, target, diagnostics);
     return events.map((event) => ({ ...event, status: 'upcoming' }));
   } finally {
-    await context.close();
-    await browser.close();
+    clearTimeout(timeout);
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
 }
 
@@ -280,6 +314,28 @@ async function resultPayload(slug, diagnostics = null) {
     events,
     ...(diagnostics ? { diagnostics } : {}),
   };
+}
+
+async function cachedResultPayload(slug) {
+  const now = Date.now();
+  if (cachedPayload && cacheExpiresAt > now) {
+    return { ...cachedPayload, cache: 'hit' };
+  }
+
+  const joinedExistingRun = activeScrape !== null;
+  if (!activeScrape) {
+    activeScrape = resultPayload(slug)
+      .then((payload) => {
+        cachedPayload = payload;
+        cacheExpiresAt = Date.now() + cacheTtlMs;
+        return payload;
+      })
+      .finally(() => {
+        activeScrape = null;
+      });
+  }
+  const payload = await activeScrape;
+  return { ...payload, cache: joinedExistingRun ? 'shared' : 'miss' };
 }
 
 if (isOneShot) {
@@ -304,6 +360,11 @@ if (isOneShot) {
       return;
     }
 
+    if (!hasValidBrowserToken(request)) {
+      json(response, 401, { error: 'Unauthorized' });
+      return;
+    }
+
     const slug = (url.searchParams.get('slug') || configuredSlug).trim();
     if (slug !== configuredSlug || !/^[a-z0-9._-]+$/i.test(slug)) {
       json(response, 400, { error: 'Facebook page is not allowed' });
@@ -311,8 +372,7 @@ if (isOneShot) {
     }
 
     try {
-      const diagnostics = url.searchParams.get('debug') === '1' ? [] : null;
-      json(response, 200, await resultPayload(slug, diagnostics));
+      json(response, 200, await cachedResultPayload(slug));
     } catch (error) {
       json(response, 502, {
         error: error instanceof Error ? error.message : 'Facebook could not be loaded',
