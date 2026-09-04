@@ -379,10 +379,7 @@ if (isOneShot) {
     }
 
     try {
-      const diagnostics = url.searchParams.get('debug') === '1' ? [] : null;
-      json(response, 200, diagnostics
-        ? await resultPayload(slug, diagnostics)
-        : await cachedResultPayload(slug));
+      json(response, 200, await cachedResultPayload(slug));
     } catch (error) {
       json(response, 502, {
         error: error instanceof Error ? error.message : 'Facebook could not be loaded',
