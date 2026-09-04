@@ -77,31 +77,6 @@ async function primaryResult() {
   return normalized;
 }
 
-async function fallbackResult() {
-  const configured = text(process.env.FALLBACK_BROWSER_URL || 'https://events.kulturhus.de');
-  const endpoint = new URL(configured);
-  if (!/\/events\/?$/i.test(endpoint.pathname)) {
-    endpoint.pathname = `${endpoint.pathname.replace(/\/$/, '')}/events`;
-  }
-  endpoint.searchParams.set('slug', text(process.env.FACEBOOK_PAGE_SLUG || 'kulturhusjaderberg'));
-  endpoint.searchParams.set('scope', 'upcoming');
-  const browserToken = text(process.env.EVENT_BROWSER_TOKEN);
-  if (browserToken.length < 32) throw new Error('EVENT_BROWSER_TOKEN fehlt oder ist zu kurz.');
-
-  const response = await fetch(endpoint, {
-    headers: {
-      Accept: 'application/json',
-      'X-Kulturhus-Event-Token': browserToken,
-    },
-    signal: AbortSignal.timeout(70000),
-  });
-  const body = await response.text();
-  if (!response.ok) throw new Error(`Node.js-Browserdienst antwortete mit HTTP ${response.status}.`);
-  const normalized = normalizePayload(JSON.parse(body), 'nodejs-webhost-fallback');
-  if (!normalized.events.length) throw new Error('Auch der Node.js-Browserdienst fand keine verwendbaren Facebook-Events.');
-  return normalized;
-}
-
 async function deliver(payload) {
   const callbackUrl = text(process.env.PROCESSWIRE_CALLBACK_URL);
   const callbackToken = text(process.env.PROCESSWIRE_CALLBACK_TOKEN);
@@ -134,8 +109,23 @@ async function main() {
     payload = await primaryResult();
   } catch (error) {
     primaryError = error instanceof Error ? error.message : String(error);
-    process.stdout.write(`Primärer Abruf nicht verwendbar: ${primaryError} Rückfall wird gestartet.\n`);
-    payload = await fallbackResult();
+    payload = {
+      status: 'fallback_required',
+      page: text(process.env.FACEBOOK_PAGE_SLUG || 'kulturhusjaderberg'),
+      scope: 'upcoming',
+      source: 'processwire-fallback-request',
+      fetched_at: new Date().toISOString(),
+      count: 0,
+      events: [],
+      delivery: {
+        selected_source: 'processwire-graph-api-then-webspace',
+        primary_error: primaryError,
+      },
+    };
+    await writeFile(resultFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    await deliver(payload);
+    process.stdout.write(`GitHub-Chromium war nicht verwendbar; ProcessWire hat den automatischen Rückfall übernommen.\n`);
+    return;
   }
 
   payload.delivery = {
