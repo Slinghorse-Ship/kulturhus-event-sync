@@ -30,7 +30,7 @@ jobs:
           package-manager-cache: false
 
       - name: Abhaengigkeiten installieren
-        run: npm install
+        run: npm ci
 
       - name: Chromium installieren
         run: npx playwright-core install --with-deps chromium
