@@ -120,9 +120,9 @@ async function deliver(payload) {
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(30000),
   });
-  const responseText = await response.text();
+  await response.text();
   if (!response.ok) {
-    throw new Error(`ProcessWire-Callback antwortete mit HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+    throw new Error(`ProcessWire-Callback antwortete mit HTTP ${response.status}.`);
   }
   process.stdout.write(`ProcessWire hat ${payload.count} Facebook-Events erhalten.\n`);
 }
