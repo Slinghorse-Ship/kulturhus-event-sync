@@ -50,7 +50,7 @@ jobs:
           FALLBACK_BROWSER_URL: ${{ github.event.client_payload.fallback_url || 'https://events.kulturhus.de' }}
           EVENT_BROWSER_TOKEN: ${{ secrets.EVENT_BROWSER_TOKEN }}
           PROCESSWIRE_CALLBACK_URL: ${{ github.event.client_payload.callback_url }}
-          PROCESSWIRE_CALLBACK_TOKEN: ${{ github.event.client_payload.callback_token }}
+          PROCESSWIRE_CALLBACK_TOKEN: ${{ secrets.EVENT_BROWSER_TOKEN }}
         run: node deliver.mjs
 
       - name: Ergebnis bereitstellen
